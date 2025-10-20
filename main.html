@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <div class="header-bar">
+      <h1>Blueprint Visualizer</h1>
+      <label class="switch">
+        <input type="checkbox" id="toggleExtension">
+        <span class="slider"></span>
+      </label>
+    </div>
+    
+    <div class="section">
+      <h3>Blueprint Elements</h3>
+      <div class="toggle-container">
+        <span class="toggle-label">Border</span>
+        <label class="switch">
+          <input type="checkbox" id="toggleBlueprintBorder">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="toggle-container">
+        <span class="toggle-label">Highlight</span>
+        <label class="switch">
+          <input type="checkbox" id="toggleBlueprintHighlight">
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+    
+    <div class="section">
+      <h3>Non-Blueprint Elements</h3>
+      <div class="toggle-container">
+        <span class="toggle-label">Border</span>
+        <label class="switch">
+          <input type="checkbox" id="toggleNonBlueprintBorder">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="toggle-container">
+        <span class="toggle-label">Highlight</span>
+        <label class="switch">
+          <input type="checkbox" id="toggleNonBlueprintHighlight">
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+    
+    <div class="info">
+      <div id="blueprintCount">Loading...</div>
+      <div id="nonBlueprintCount">Loading...</div>
+    </div>
+    
+    <script src="popup.js"></script>
+  </body>
+</html>
