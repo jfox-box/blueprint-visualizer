@@ -1,13 +1,13 @@
 # Blueprint Visualizer Chrome Extension
 
-A Chrome extension that helps developers visualize Blueprint components and non-Blueprint elements on web pages with customizable highlighting options.
+A Chrome extension that helps developers visualize Blueprint components on web pages.
 
 <img width="1491" height="1035" alt="Screenshot 2025-10-20 at 3 52 13 PM" src="https://github.com/user-attachments/assets/e6f22d9a-6685-4af7-8a02-2b9ddad19acb" />
 
 
 ## Features
 
-- 🔍 **Smart Detection**: Automatically finds Blueprint components (elements with `bp_` classes) and non-Blueprint elements
+- 🔍 **Smart Detection**: Automatically finds Blueprint components (elements with `bp_` classes)
 - 🎨 **Dual Highlighting**: Separate highlighting for Blueprint (green) and non-Blueprint (red) elements
 - 🎛️ **Granular Controls**: Independent toggles for borders and highlights on both element types
 - 💾 **Persistent Settings**: Remembers all preferences across browser sessions
