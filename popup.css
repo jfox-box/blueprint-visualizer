@@ -2,8 +2,10 @@
 
 body {
   width: 300px;
+  max-height: 500px;
   padding: 20px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+  overflow-y: auto;
 }
 
 h1 {
@@ -106,7 +108,65 @@ input:checked + .slider:before {
 }
 
 /* Disabled switch visual */
-.switch input:disabled + .slider {
-  opacity: 0.5;
-  cursor: not-allowed;
+
+/* Color picker styles */
+.color-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
 }
+
+.color-group {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.color-label {
+  font-size: 12px;
+  color: #666;
+  min-width: 80px;
+}
+
+input[type="color"] {
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  background: none;
+}
+
+input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+  border-radius: 4px;
+}
+
+input[type="color"]::-webkit-color-swatch {
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+
+.reset-container {
+  display: flex;
+  justify-content: center;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #eee;
+}
+
+.reset-link {
+  font-size: 11px;
+  color: #2196F3;
+  cursor: pointer;
+  text-decoration: underline;
+  transition: color 0.2s;
+}
+
+.reset-link:hover {
+  color: #1976D2;
+}
+

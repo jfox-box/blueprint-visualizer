@@ -28,20 +28,6 @@ A Chrome extension that helps developers visualize Blueprint components and non-
    - **Non-Blueprint Elements**: Border and Highlight toggles (red)
 4. **View live counts** of elements found on the current page
 
-## Visual System
-
-### Blueprint Elements (Green)
-- **Border**: Green outline around Blueprint components
-- **Highlight**: Semi-transparent green overlay on Blueprint components
-
-### Non-Blueprint Elements (Red)
-- **Border**: Red outline around non-Blueprint elements  
-- **Highlight**: Semi-transparent red overlay on non-Blueprint elements
-
-### Smart Positioning
-- **Borders**: Applied to all elements (safe for any positioning)
-- **Highlights**: Only applied to `static` or `relative` positioned elements to avoid layout issues
-
 ## Technical Details
 
 ### File Structure

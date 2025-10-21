@@ -6,6 +6,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     const blueprintHighlightToggle = document.getElementById('toggleBlueprintHighlight');
     const nonBlueprintBorderToggle = document.getElementById('toggleNonBlueprintBorder');
     const nonBlueprintHighlightToggle = document.getElementById('toggleNonBlueprintHighlight');
+    const blueprintColorPicker = document.getElementById('blueprintColor');
+    const nonBlueprintColorPicker = document.getElementById('nonBlueprintColor');
+    const resetColorsLink = document.getElementById('resetColors');
     const blueprintCountElement = document.getElementById('blueprintCount');
     const nonBlueprintCountElement = document.getElementById('nonBlueprintCount');
     
@@ -15,23 +18,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Load saved state
     chrome.storage.sync.get([
       'extensionEnabled',
-      'blueprintBorderEnabled', 
-      'blueprintHighlightEnabled', 
-      'nonBlueprintBorderEnabled', 
-      'nonBlueprintHighlightEnabled'
+      'blueprintBorderEnabled',
+      'blueprintHighlightEnabled',
+      'nonBlueprintBorderEnabled',
+      'nonBlueprintHighlightEnabled',
+      'blueprintColor',
+      'nonBlueprintColor'
     ], (result) => {
       extensionToggle.checked = result.extensionEnabled ?? true;
       blueprintBorderToggle.checked = result.blueprintBorderEnabled || false;
       blueprintHighlightToggle.checked = result.blueprintHighlightEnabled || false;
       nonBlueprintBorderToggle.checked = result.nonBlueprintBorderEnabled || false;
       nonBlueprintHighlightToggle.checked = result.nonBlueprintHighlightEnabled || false;
-
-      // Disable/enable other toggles based on extensionEnabled
-      const disabled = !(result.extensionEnabled ?? true);
-      blueprintBorderToggle.disabled = disabled;
-      blueprintHighlightToggle.disabled = disabled;
-      nonBlueprintBorderToggle.disabled = disabled;
-      nonBlueprintHighlightToggle.disabled = disabled;
+      blueprintColorPicker.value = result.blueprintColor || '#00ff00';
+      nonBlueprintColorPicker.value = result.nonBlueprintColor || '#ff0000';
     });
     extensionToggle.addEventListener('change', async () => {
       const enabled = extensionToggle.checked;
@@ -46,13 +46,57 @@ document.addEventListener('DOMContentLoaded', async () => {
         extensionToggle.checked = !enabled;
         chrome.storage.sync.set({ extensionEnabled: !enabled });
       }
+    });
 
-      // Immediately reflect disable state in UI
-      const disabled = !enabled;
-      blueprintBorderToggle.disabled = disabled;
-      blueprintHighlightToggle.disabled = disabled;
-      nonBlueprintBorderToggle.disabled = disabled;
-      nonBlueprintHighlightToggle.disabled = disabled;
+    // Handle color picker changes
+    blueprintColorPicker.addEventListener('change', async () => {
+      const color = blueprintColorPicker.value;
+      chrome.storage.sync.set({ blueprintColor: color });
+      try {
+        await chrome.tabs.sendMessage(tab.id, {
+          action: 'updateColors',
+          blueprintColor: color
+        });
+      } catch (error) {
+        console.error('Error updating Blueprint color:', error);
+      }
+    });
+
+    nonBlueprintColorPicker.addEventListener('change', async () => {
+      const color = nonBlueprintColorPicker.value;
+      chrome.storage.sync.set({ nonBlueprintColor: color });
+      try {
+        await chrome.tabs.sendMessage(tab.id, {
+          action: 'updateColors',
+          nonBlueprintColor: color
+        });
+      } catch (error) {
+        console.error('Error updating non-Blueprint color:', error);
+      }
+    });
+
+    // Handle reset link
+    resetColorsLink.addEventListener('click', async () => {
+      // Reset to defaults
+      blueprintColorPicker.value = '#00ff00';
+      nonBlueprintColorPicker.value = '#ff0000';
+
+      // Save to storage
+      chrome.storage.sync.set({
+        blueprintColor: '#00ff00',
+        nonBlueprintColor: '#ff0000'
+      });
+
+      // Update colors in content script
+      try {
+        await chrome.tabs.sendMessage(tab.id, {
+          action: 'updateColors',
+          blueprintColor: '#00ff00',
+          nonBlueprintColor: '#ff0000'
+        });
+      } catch (error) {
+        console.error('Error resetting colors:', error);
+      }
     });
 
     

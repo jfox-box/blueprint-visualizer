@@ -12,6 +12,8 @@ link.type = 'text/css';
 link.href = chrome.runtime.getURL('styles.css');
 document.head.appendChild(link);
 
+let dynamicStyle = null;
+
 let observerStarted = false;
 
 // Cache last scan results for counts
@@ -84,6 +86,46 @@ function removeAllVisualizationClasses() {
   });
 }
 
+function updateColors() {
+  chrome.storage.sync.get(['blueprintColor', 'nonBlueprintColor'], (colors) => {
+    const blueprintColor = colors.blueprintColor || '#00ff00';
+    const nonBlueprintColor = colors.nonBlueprintColor || '#ff0000';
+    
+    // Convert hex to rgba for highlights (fixed opacity values)
+    const blueprintRgba = hexToRgba(blueprintColor, 0.1); // 10% opacity
+    const nonBlueprintRgba = hexToRgba(nonBlueprintColor, 0.01); // 1% opacity
+    
+    // Create dynamic style element if it doesn't exist
+    if (!dynamicStyle) {
+      dynamicStyle = document.createElement('style');
+      dynamicStyle.id = 'bp-extension-dynamic-colors';
+      document.head.appendChild(dynamicStyle);
+    }
+    
+    dynamicStyle.textContent = `
+      .${BLUEPRINT_BORDER_CLASS} {
+        border-color: ${blueprintColor} !important;
+      }
+      .${BLUEPRINT_HIGHLIGHT_CLASS}::after {
+        background-color: ${blueprintRgba} !important;
+      }
+      .${NON_BLUEPRINT_BORDER_CLASS} {
+        border-color: ${nonBlueprintColor} !important;
+      }
+      .${NON_BLUEPRINT_HIGHLIGHT_CLASS}::after {
+        background-color: ${nonBlueprintRgba} !important;
+      }
+    `;
+  });
+}
+
+function hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 function updateVisualization() {
   chrome.storage.sync.get([
     'extensionEnabled',
@@ -99,6 +141,12 @@ function updateVisualization() {
         observerStarted = false;
       }
       removeAllVisualizationClasses();
+      
+      // Remove dynamic style element when extension is disabled
+      if (dynamicStyle) {
+        dynamicStyle.remove();
+        dynamicStyle = null;
+      }
       return;
     }
 
@@ -110,6 +158,9 @@ function updateVisualization() {
 
     const categories = scanAndCategorizeElements();
     lastScanResults = categories; // Cache results for counts
+    
+    // Update colors before applying classes
+    updateColors();
     
     // Blueprint border
     if (flags.blueprintBorderEnabled) {
@@ -161,6 +212,10 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
     // Flags are saved by the popup; just recompute once here
     updateVisualization();
     sendResponse({ success: true });
+          } else if (request.action === 'updateColors') {
+            // Update colors immediately (handles both color and opacity changes)
+            updateColors();
+            sendResponse({ success: true });
   } else if (request.action === 'getCounts') {
     chrome.storage.sync.get(['extensionEnabled'], (flags) => {
       if (!flags.extensionEnabled) {
@@ -193,9 +248,12 @@ chrome.storage.sync.get([
   'blueprintBorderEnabled', 
   'blueprintHighlightEnabled', 
   'nonBlueprintBorderEnabled', 
-  'nonBlueprintHighlightEnabled'
+  'nonBlueprintHighlightEnabled',
+  'blueprintColor', // Load initial colors
+  'nonBlueprintColor' // Load initial colors
 ], () => {
   updateVisualization();
+  updateColors(); // Ensure colors are set on initial load
 });
 
 // Watch for dynamic content changes
