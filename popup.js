@@ -1,5 +1,16 @@
 // Popup script to control Blueprint component highlighting
 
+// Helper function to handle extension context errors
+function handleExtensionError(error, action) {
+  if (error.message && error.message.includes('Extension context invalidated')) {
+    console.log('Extension context invalidated, please reload the page');
+    return true;
+  } else {
+    console.error(`Error ${action}:`, error);
+    return false;
+  }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     const extensionToggle = document.getElementById('toggleExtension');
     const blueprintBorderToggle = document.getElementById('toggleBlueprintBorder');
@@ -15,7 +26,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Get current tab
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     
-    // Load saved state
+    // Load saved state with proper defaults
     chrome.storage.sync.get([
       'extensionEnabled',
       'blueprintBorderEnabled',
@@ -25,13 +36,34 @@ document.addEventListener('DOMContentLoaded', async () => {
       'blueprintColor',
       'nonBlueprintColor'
     ], (result) => {
-      extensionToggle.checked = result.extensionEnabled ?? true;
-      blueprintBorderToggle.checked = result.blueprintBorderEnabled || false;
-      blueprintHighlightToggle.checked = result.blueprintHighlightEnabled || false;
-      nonBlueprintBorderToggle.checked = result.nonBlueprintBorderEnabled || false;
-      nonBlueprintHighlightToggle.checked = result.nonBlueprintHighlightEnabled || false;
-      blueprintColorPicker.value = result.blueprintColor || '#00ff00';
-      nonBlueprintColorPicker.value = result.nonBlueprintColor || '#ff0000';
+      // Default values for first load
+      const defaults = {
+        extensionEnabled: true,
+        blueprintBorderEnabled: false,
+        blueprintHighlightEnabled: false,
+        nonBlueprintBorderEnabled: false,
+        nonBlueprintHighlightEnabled: false,
+        blueprintColor: '#00ff00',
+        nonBlueprintColor: '#ff0000'
+      };
+      
+      // Check if this is first load
+      const isFirstLoad = Object.values(result).every(value => value === undefined);
+      
+      if (isFirstLoad) {
+        // Save defaults to storage
+        chrome.storage.sync.set(defaults);
+        console.log('First load detected, initializing popup with defaults');
+      }
+      
+      // Use saved values or defaults
+      extensionToggle.checked = result.extensionEnabled ?? defaults.extensionEnabled;
+      blueprintBorderToggle.checked = result.blueprintBorderEnabled ?? defaults.blueprintBorderEnabled;
+      blueprintHighlightToggle.checked = result.blueprintHighlightEnabled ?? defaults.blueprintHighlightEnabled;
+      nonBlueprintBorderToggle.checked = result.nonBlueprintBorderEnabled ?? defaults.nonBlueprintBorderEnabled;
+      nonBlueprintHighlightToggle.checked = result.nonBlueprintHighlightEnabled ?? defaults.nonBlueprintHighlightEnabled;
+      blueprintColorPicker.value = result.blueprintColor ?? defaults.blueprintColor;
+      nonBlueprintColorPicker.value = result.nonBlueprintColor ?? defaults.nonBlueprintColor;
     });
     extensionToggle.addEventListener('change', async () => {
       const enabled = extensionToggle.checked;
@@ -42,7 +74,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           enabled: enabled
         });
       } catch (error) {
-        console.error('Error toggling extension:', error);
+        handleExtensionError(error, 'toggling extension');
         extensionToggle.checked = !enabled;
         chrome.storage.sync.set({ extensionEnabled: !enabled });
       }
@@ -58,7 +90,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           blueprintColor: color
         });
       } catch (error) {
-        console.error('Error updating Blueprint color:', error);
+        handleExtensionError(error, 'updating Blueprint color');
       }
     });
 
@@ -71,7 +103,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           nonBlueprintColor: color
         });
       } catch (error) {
-        console.error('Error updating non-Blueprint color:', error);
+        handleExtensionError(error, 'updating non-Blueprint color');
       }
     });
 
@@ -95,26 +127,40 @@ document.addEventListener('DOMContentLoaded', async () => {
           nonBlueprintColor: '#ff0000'
         });
       } catch (error) {
-        console.error('Error resetting colors:', error);
+        handleExtensionError(error, 'resetting colors');
       }
     });
 
     
-    // Get component counts
-    try {
-      const response = await chrome.tabs.sendMessage(tab.id, { action: 'getCounts' });
-      if (response && response.blueprintCount !== undefined && response.nonBlueprintCount !== undefined) {
-        blueprintCountElement.innerHTML = `Found <span class="count">${response.blueprintCount}</span> Blueprint component${response.blueprintCount !== 1 ? 's' : ''}`;
-        nonBlueprintCountElement.innerHTML = `Found <span class="count">${response.nonBlueprintCount}</span> non-Blueprint element${response.nonBlueprintCount !== 1 ? 's' : ''}`;
-      } else {
-        blueprintCountElement.textContent = 'Unable to scan page - try refreshing';
-        nonBlueprintCountElement.textContent = '';
+    // Get component counts with retry logic for first load
+    async function getCountsWithRetry(retries = 3) {
+      for (let i = 0; i < retries; i++) {
+        try {
+          const response = await chrome.tabs.sendMessage(tab.id, { action: 'getCounts' });
+          if (response && response.blueprintCount !== undefined && response.nonBlueprintCount !== undefined) {
+            blueprintCountElement.innerHTML = `Found <span class="count">${response.blueprintCount}</span> Blueprint component${response.blueprintCount !== 1 ? 's' : ''}`;
+            nonBlueprintCountElement.innerHTML = `Found <span class="count">${response.nonBlueprintCount}</span> non-Blueprint element${response.nonBlueprintCount !== 1 ? 's' : ''}`;
+            return;
+          }
+        } catch (error) {
+          if (i === retries - 1) {
+            handleExtensionError(error, 'communicating with content script');
+            blueprintCountElement.textContent = 'Please refresh the page to use this extension';
+            nonBlueprintCountElement.textContent = '';
+            return;
+          }
+          // Wait a bit before retrying
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
       }
-    } catch (error) {
-      console.error('Error communicating with content script:', error);
-      blueprintCountElement.textContent = 'Please refresh the page to use this extension';
+      blueprintCountElement.textContent = 'Unable to scan page - try refreshing';
       nonBlueprintCountElement.textContent = '';
     }
+    
+    // Try to get counts after a short delay to ensure content script is ready
+    setTimeout(() => {
+      getCountsWithRetry();
+    }, 100);
     
     // Handle Blueprint border toggle change
     blueprintBorderToggle.addEventListener('change', async () => {
@@ -130,7 +176,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           enabled: enabled
         });
       } catch (error) {
-        console.error('Error toggling Blueprint border:', error);
+        handleExtensionError(error, 'toggling Blueprint border');
         // Revert toggle state if message failed
         blueprintBorderToggle.checked = !enabled;
         chrome.storage.sync.set({ blueprintBorderEnabled: !enabled });
@@ -151,7 +197,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           enabled: enabled
         });
       } catch (error) {
-        console.error('Error toggling Blueprint highlight:', error);
+        handleExtensionError(error, 'toggling Blueprint highlight');
         // Revert toggle state if message failed
         blueprintHighlightToggle.checked = !enabled;
         chrome.storage.sync.set({ blueprintHighlightEnabled: !enabled });
@@ -172,7 +218,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           enabled: enabled
         });
       } catch (error) {
-        console.error('Error toggling non-Blueprint border:', error);
+        handleExtensionError(error, 'toggling non-Blueprint border');
         // Revert toggle state if message failed
         nonBlueprintBorderToggle.checked = !enabled;
         chrome.storage.sync.set({ nonBlueprintBorderEnabled: !enabled });
@@ -193,7 +239,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           enabled: enabled
         });
       } catch (error) {
-        console.error('Error toggling non-Blueprint highlight:', error);
+        handleExtensionError(error, 'toggling non-Blueprint highlight');
         // Revert toggle state if message failed
         nonBlueprintHighlightToggle.checked = !enabled;
         chrome.storage.sync.set({ nonBlueprintHighlightEnabled: !enabled });

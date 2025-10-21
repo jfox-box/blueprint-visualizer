@@ -87,36 +87,41 @@ function removeAllVisualizationClasses() {
 }
 
 function updateColors() {
-  chrome.storage.sync.get(['blueprintColor', 'nonBlueprintColor'], (colors) => {
-    const blueprintColor = colors.blueprintColor || '#00ff00';
-    const nonBlueprintColor = colors.nonBlueprintColor || '#ff0000';
-    
-    // Convert hex to rgba for highlights (fixed opacity values)
-    const blueprintRgba = hexToRgba(blueprintColor, 0.1); // 10% opacity
-    const nonBlueprintRgba = hexToRgba(nonBlueprintColor, 0.01); // 1% opacity
-    
-    // Create dynamic style element if it doesn't exist
-    if (!dynamicStyle) {
-      dynamicStyle = document.createElement('style');
-      dynamicStyle.id = 'bp-extension-dynamic-colors';
-      document.head.appendChild(dynamicStyle);
-    }
-    
-    dynamicStyle.textContent = `
-      .${BLUEPRINT_BORDER_CLASS} {
-        border-color: ${blueprintColor} !important;
+  try {
+    chrome.storage.sync.get(['blueprintColor', 'nonBlueprintColor'], (colors) => {
+      const blueprintColor = colors.blueprintColor || '#00ff00';
+      const nonBlueprintColor = colors.nonBlueprintColor || '#ff0000';
+      
+      // Convert hex to rgba for highlights (fixed opacity values)
+      const blueprintRgba = hexToRgba(blueprintColor, 0.1); // 10% opacity
+      const nonBlueprintRgba = hexToRgba(nonBlueprintColor, 0.01); // 1% opacity
+      
+      // Create dynamic style element if it doesn't exist
+      if (!dynamicStyle) {
+        dynamicStyle = document.createElement('style');
+        dynamicStyle.id = 'bp-extension-dynamic-colors';
+        document.head.appendChild(dynamicStyle);
       }
-      .${BLUEPRINT_HIGHLIGHT_CLASS}::after {
-        background-color: ${blueprintRgba} !important;
-      }
-      .${NON_BLUEPRINT_BORDER_CLASS} {
-        border-color: ${nonBlueprintColor} !important;
-      }
-      .${NON_BLUEPRINT_HIGHLIGHT_CLASS}::after {
-        background-color: ${nonBlueprintRgba} !important;
-      }
-    `;
-  });
+      
+      dynamicStyle.textContent = `
+        .${BLUEPRINT_BORDER_CLASS} {
+          border-color: ${blueprintColor} !important;
+        }
+        .${BLUEPRINT_HIGHLIGHT_CLASS}::after {
+          background-color: ${blueprintRgba} !important;
+        }
+        .${NON_BLUEPRINT_BORDER_CLASS} {
+          border-color: ${nonBlueprintColor} !important;
+        }
+        .${NON_BLUEPRINT_HIGHLIGHT_CLASS}::after {
+          background-color: ${nonBlueprintRgba} !important;
+        }
+      `;
+    });
+  } catch (error) {
+    console.log('Extension context invalidated, stopping execution');
+    return;
+  }
 }
 
 function hexToRgba(hex, alpha) {
@@ -127,13 +132,14 @@ function hexToRgba(hex, alpha) {
 }
 
 function updateVisualization() {
-  chrome.storage.sync.get([
-    'extensionEnabled',
-    'blueprintBorderEnabled',
-    'blueprintHighlightEnabled',
-    'nonBlueprintBorderEnabled',
-    'nonBlueprintHighlightEnabled'
-  ], (flags) => {
+  try {
+    chrome.storage.sync.get([
+      'extensionEnabled',
+      'blueprintBorderEnabled',
+      'blueprintHighlightEnabled',
+      'nonBlueprintBorderEnabled',
+      'nonBlueprintHighlightEnabled'
+    ], (flags) => {
     if (!flags.extensionEnabled) {
       // Extension toggled OFF: remove everything and stop observing
       if (observerStarted && observer) {
@@ -200,61 +206,111 @@ function updateVisualization() {
       removeClassBySelector(`.${NON_BLUEPRINT_HIGHLIGHT_CLASS}`, NON_BLUEPRINT_HIGHLIGHT_CLASS);
     }
   });
+  } catch (error) {
+    console.log('Extension context invalidated, stopping execution');
+    return;
+  }
 }
 
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
-  if (request.action === 'toggleBlueprintBorder' ||
-      request.action === 'toggleBlueprintHighlight' ||
-      request.action === 'toggleNonBlueprintBorder' ||
-      request.action === 'toggleNonBlueprintHighlight' ||
-      request.action === 'toggleExtension') {
-    // Flags are saved by the popup; just recompute once here
-    updateVisualization();
-    sendResponse({ success: true });
-          } else if (request.action === 'updateColors') {
-            // Update colors immediately (handles both color and opacity changes)
-            updateColors();
-            sendResponse({ success: true });
-  } else if (request.action === 'getCounts') {
-    chrome.storage.sync.get(['extensionEnabled'], (flags) => {
-      if (!flags.extensionEnabled) {
-        sendResponse({ blueprintCount: 0, nonBlueprintCount: 0 });
-      } else if (lastScanResults) {
-        const blueprintCount = lastScanResults.blueprint.highlightable.length + lastScanResults.blueprint.borderOnly.length;
-        const nonBlueprintCount = lastScanResults.nonBlueprint.highlightable.length + lastScanResults.nonBlueprint.borderOnly.length;
-        sendResponse({ 
-          blueprintCount: blueprintCount,
-          nonBlueprintCount: nonBlueprintCount 
-        });
-      } else {
-        // Fallback: scan if no cached results
-        const categories = scanAndCategorizeElements();
-        const blueprintCount = categories.blueprint.highlightable.length + categories.blueprint.borderOnly.length;
-        const nonBlueprintCount = categories.nonBlueprint.highlightable.length + categories.nonBlueprint.borderOnly.length;
-        sendResponse({ 
-          blueprintCount: blueprintCount,
-          nonBlueprintCount: nonBlueprintCount 
-        });
-      }
-    });
+  try {
+    if (request.action === 'toggleBlueprintBorder' ||
+        request.action === 'toggleBlueprintHighlight' ||
+        request.action === 'toggleNonBlueprintBorder' ||
+        request.action === 'toggleNonBlueprintHighlight' ||
+        request.action === 'toggleExtension') {
+      // Flags are saved by the popup; just recompute once here
+      updateVisualization();
+      sendResponse({ success: true });
+    } else if (request.action === 'updateColors') {
+      // Update colors immediately (handles both color and opacity changes)
+      updateColors();
+      sendResponse({ success: true });
+    } else if (request.action === 'getCounts') {
+      chrome.storage.sync.get(['extensionEnabled'], (flags) => {
+        if (!flags.extensionEnabled) {
+          sendResponse({ blueprintCount: 0, nonBlueprintCount: 0 });
+        } else if (lastScanResults) {
+          const blueprintCount = lastScanResults.blueprint.highlightable.length + lastScanResults.blueprint.borderOnly.length;
+          const nonBlueprintCount = lastScanResults.nonBlueprint.highlightable.length + lastScanResults.nonBlueprint.borderOnly.length;
+          sendResponse({ 
+            blueprintCount: blueprintCount,
+            nonBlueprintCount: nonBlueprintCount 
+          });
+        } else {
+          // Fallback: scan if no cached results
+          const categories = scanAndCategorizeElements();
+          const blueprintCount = categories.blueprint.highlightable.length + categories.blueprint.borderOnly.length;
+          const nonBlueprintCount = categories.nonBlueprint.highlightable.length + categories.nonBlueprint.borderOnly.length;
+          sendResponse({ 
+            blueprintCount: blueprintCount,
+            nonBlueprintCount: nonBlueprintCount 
+          });
+        }
+      });
+    }
+  } catch (error) {
+    console.log('Extension context invalidated, stopping execution');
+    sendResponse({ success: false, error: 'Extension context invalidated' });
   }
   return true;
 });
 
-// Check initial state from storage and apply if needed
-chrome.storage.sync.get([
-  'extensionEnabled',
-  'blueprintBorderEnabled', 
-  'blueprintHighlightEnabled', 
-  'nonBlueprintBorderEnabled', 
-  'nonBlueprintHighlightEnabled',
-  'blueprintColor', // Load initial colors
-  'nonBlueprintColor' // Load initial colors
-], () => {
-  updateVisualization();
-  updateColors(); // Ensure colors are set on initial load
-});
+// Initialize extension with default values on first load
+function initializeExtension() {
+  try {
+    chrome.storage.sync.get([
+      'extensionEnabled',
+      'blueprintBorderEnabled', 
+      'blueprintHighlightEnabled', 
+      'nonBlueprintBorderEnabled', 
+      'nonBlueprintHighlightEnabled',
+      'blueprintColor',
+      'nonBlueprintColor'
+    ], (result) => {
+      // Set default values if they don't exist (first load)
+      const defaults = {
+        extensionEnabled: true,
+        blueprintBorderEnabled: false,
+        blueprintHighlightEnabled: false,
+        nonBlueprintBorderEnabled: false,
+        nonBlueprintHighlightEnabled: false,
+        blueprintColor: '#00ff00',
+        nonBlueprintColor: '#ff0000'
+      };
+      
+      // Check if this is first load (no saved data)
+      const isFirstLoad = Object.values(result).every(value => value === undefined);
+      
+      if (isFirstLoad) {
+        // Save defaults to storage
+        chrome.storage.sync.set(defaults);
+        console.log('First load detected, initializing with defaults');
+      }
+      
+      // Use saved values or defaults
+      const settings = {
+        extensionEnabled: result.extensionEnabled ?? defaults.extensionEnabled,
+        blueprintBorderEnabled: result.blueprintBorderEnabled ?? defaults.blueprintBorderEnabled,
+        blueprintHighlightEnabled: result.blueprintHighlightEnabled ?? defaults.blueprintHighlightEnabled,
+        nonBlueprintBorderEnabled: result.nonBlueprintBorderEnabled ?? defaults.nonBlueprintBorderEnabled,
+        nonBlueprintHighlightEnabled: result.nonBlueprintHighlightEnabled ?? defaults.nonBlueprintHighlightEnabled,
+        blueprintColor: result.blueprintColor ?? defaults.blueprintColor,
+        nonBlueprintColor: result.nonBlueprintColor ?? defaults.nonBlueprintColor
+      };
+      
+      // Apply settings
+      updateVisualization();
+      updateColors();
+    });
+  } catch (error) {
+    console.log('Extension context invalidated, stopping execution');
+  }
+}
+
+// Initialize on load
+initializeExtension();
 
 // Watch for dynamic content changes
 let observerTimeout;
@@ -262,16 +318,21 @@ const observer = new MutationObserver((mutations) => {
   // Debounce rapid mutations to avoid performance issues
   clearTimeout(observerTimeout);
   observerTimeout = setTimeout(() => {
-    chrome.storage.sync.get(['extensionEnabled'], (result) => {
-      // Only process mutations that might contain new elements
-      const hasRelevantChanges = mutations.some(mutation => 
-        mutation.type === 'childList' && 
-        (mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0)
-      );
-      
-      if (hasRelevantChanges && result.extensionEnabled) {
-        updateVisualization();
-      }
-    });
+    try {
+      chrome.storage.sync.get(['extensionEnabled'], (result) => {
+        // Only process mutations that might contain new elements
+        const hasRelevantChanges = mutations.some(mutation => 
+          mutation.type === 'childList' && 
+          (mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0)
+        );
+        
+        if (hasRelevantChanges && result.extensionEnabled) {
+          updateVisualization();
+        }
+      });
+    } catch (error) {
+      console.log('Extension context invalidated, stopping observer');
+      observer.disconnect();
+    }
   }, 100); // 100ms debounce
 });
