@@ -1,46 +1,3 @@
-// Constants
-const CLASSES = {
-  BLUEPRINT_HIGHLIGHT: 'bp-extension-blueprint-highlight',
-  NON_BLUEPRINT_HIGHLIGHT: 'bp-extension-non-blueprint-highlight',
-  BLUEPRINT_BORDER: 'bp-extension-blueprint-border',
-  NON_BLUEPRINT_BORDER: 'bp-extension-non-blueprint-border'
-};
-
-const STORAGE_KEYS = [
-  'extensionEnabled',
-  'blueprintBorderEnabled',
-  'blueprintHighlightEnabled',
-  'nonBlueprintBorderEnabled',
-  'nonBlueprintHighlightEnabled',
-  'blueprintColor',
-  'nonBlueprintColor'
-];
-
-const DEFAULTS = {
-  extensionEnabled: true,
-  blueprintBorderEnabled: false,
-  blueprintHighlightEnabled: false,
-  nonBlueprintBorderEnabled: false,
-  nonBlueprintHighlightEnabled: false,
-  blueprintColor: '#00ff00',
-  nonBlueprintColor: '#ff0000'
-};
-
-const ACTIONS = {
-  TOGGLE_EXTENSION: 'toggleExtension',
-  TOGGLE_BLUEPRINT_BORDER: 'toggleBlueprintBorder',
-  TOGGLE_BLUEPRINT_HIGHLIGHT: 'toggleBlueprintHighlight',
-  TOGGLE_NON_BLUEPRINT_BORDER: 'toggleNonBlueprintBorder',
-  TOGGLE_NON_BLUEPRINT_HIGHLIGHT: 'toggleNonBlueprintHighlight',
-  UPDATE_COLORS: 'updateColors',
-  GET_COUNTS: 'getCounts'
-};
-
-const OPACITY = {
-  BLUEPRINT: 0.1,
-  NON_BLUEPRINT: 0.01
-};
-
 // Load external CSS file
 const link = document.createElement('link');
 link.rel = 'stylesheet';
@@ -49,11 +6,8 @@ link.href = chrome.runtime.getURL('styles.css');
 document.head.appendChild(link);
 
 let dynamicStyle = null;
-
 let observerStarted = false;
-
-// Cache last scan results for counts
-let lastScanResults = null;
+let lastScanResults = null; // Cache last scan results for counts
 
 function scanAndCategorizeElements() {
   const allElements = document.querySelectorAll('*');
@@ -71,10 +25,9 @@ function scanAndCategorizeElements() {
   allElements.forEach(element => {
     const isBlueprint = [...element.classList].some(className => className.startsWith('bp_'));
     const computedStyle = window.getComputedStyle(element);
-    const position = computedStyle.position;
     
-    // Determine if highlight can be applied to element
-    const canHighlight = position === 'static' || position === 'relative';
+    // highlight relies on positioning styles, so it can only be applied to static or relative elements
+    const canHighlight = computedStyle.position === 'static' || computedStyle.position === 'relative';
     
     if (isBlueprint) {
       if (canHighlight) {
@@ -172,25 +125,10 @@ function updateVisualization() {
       try {
         if (!flags.extensionEnabled) {
           // Extension toggled OFF: remove everything and stop observing
-          if (observerStarted && observer) {
-            try {
-              observer.disconnect();
-            } catch (error) {
-              console.log('Error disconnecting observer:', error);
-            }
-            observerStarted = false;
-          }
-          removeAllVisualizationClasses();
-          
-          // Remove dynamic style element when extension is disabled
-          if (dynamicStyle) {
-            dynamicStyle.remove();
-            dynamicStyle = null;
-          }
+          cleanup();
           return;
         }
-
-        // Extension toggled ON: ensure observing
+        
         if (!observerStarted && observer && document.body) {
           try {
             observer.observe(document.body, { childList: true, subtree: true });
@@ -285,7 +223,7 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
       }
     }
   } catch (error) {
-    console.log('Extension context invalidated, stopping execution');
+    console.log('Extension context invalidated, attempting recovery');
     sendResponse({ success: false, error: 'Extension context invalidated' });
   }
   return true;
@@ -324,51 +262,80 @@ initializeExtension();
 let observerTimeout;
 let observer = null;
 
-// Create observer with error handling
-try {
-  observer = new MutationObserver((mutations) => {
-    // Debounce rapid mutations to avoid performance issues
-    clearTimeout(observerTimeout);
-    observerTimeout = setTimeout(() => {
-      try {
-        // Check if extension context is still valid
-        if (!chrome.runtime?.id) {
+// Create observer with improved error handling and cleanup
+function createObserver() {
+  try {
+    observer = new MutationObserver((mutations) => {
+      // Debounce rapid mutations to avoid performance issues
+      clearTimeout(observerTimeout);
+      observerTimeout = setTimeout(() => {
+        try {
+          // Check if extension context is still valid
+          if (!chrome.runtime?.id) {
+            console.log('Extension context invalidated, stopping observer');
+            cleanup();
+            return;
+          }
+          
+          chrome.storage.sync.get(['extensionEnabled'], (result) => {
+            try {
+              // Only process mutations that might contain new elements
+              const hasRelevantChanges = mutations.some(mutation => 
+                mutation.type === 'childList' && 
+                (mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0)
+              );
+              
+              if (hasRelevantChanges && result.extensionEnabled) {
+                updateVisualization();
+              }
+            } catch (error) {
+              console.log('Extension context invalidated in storage callback');
+              cleanup();
+            }
+          });
+        } catch (error) {
           console.log('Extension context invalidated, stopping observer');
-          if (observer) {
-            observer.disconnect();
-            observer = null;
-          }
-          return;
+          cleanup();
         }
-        
-        chrome.storage.sync.get(['extensionEnabled'], (result) => {
-          try {
-            // Only process mutations that might contain new elements
-            const hasRelevantChanges = mutations.some(mutation => 
-              mutation.type === 'childList' && 
-              (mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0)
-            );
-            
-            if (hasRelevantChanges && result.extensionEnabled) {
-              updateVisualization();
-            }
-          } catch (error) {
-            console.log('Extension context invalidated in storage callback');
-            if (observer) {
-              observer.disconnect();
-              observer = null;
-            }
-          }
-        });
-      } catch (error) {
-        console.log('Extension context invalidated, stopping observer');
-        if (observer) {
-          observer.disconnect();
-          observer = null;
-        }
-      }
-    }, 100); // 100ms debounce
-  });
-} catch (error) {
-  console.log('Failed to create MutationObserver:', error);
+      }, 100); // 100ms debounce
+    });
+    return true;
+  } catch (error) {
+    console.log('Failed to create MutationObserver:', error);
+    return false;
+  }
 }
+
+// Cleanup function
+function cleanup() {
+  if (observer) {
+    try {
+      observer.disconnect();
+    } catch (error) {
+      console.log('Error disconnecting observer:', error);
+    }
+    observer = null;
+  }
+  observerStarted = false;
+  
+  // Clear any pending timeouts
+  if (observerTimeout) {
+    clearTimeout(observerTimeout);
+    observerTimeout = null;
+  }
+  
+  // Remove dynamic styles
+  if (dynamicStyle) {
+    dynamicStyle.remove();
+    dynamicStyle = null;
+  }
+  
+  // Remove all visualization classes
+  removeAllVisualizationClasses();
+}
+
+// Initialize observer
+createObserver();
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', cleanup);
