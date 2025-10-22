@@ -40,3 +40,12 @@ const OPACITY = {
   NON_BLUEPRINT: 0.01
 };
 
+const TIMING = {
+  DEBOUNCE_MS: 100,
+  POPUP_DELAY_MS: 100
+};
+
+const STYLES = {
+  Z_INDEX: 9999
+};
+

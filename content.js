@@ -8,6 +8,7 @@ document.head.appendChild(link);
 let dynamicStyle = null;
 let observerStarted = false;
 let lastScanResults = null; // Cache last scan results for counts
+let storageListener = null;
 
 function scanAndCategorizeElements() {
   const allElements = document.querySelectorAll('*');
@@ -142,9 +143,6 @@ function updateVisualization() {
         const categories = scanAndCategorizeElements();
         lastScanResults = categories; // Cache results for counts
         
-        // Update colors before applying classes
-        updateColors();
-        
         // Apply classes based on settings
         const settings = [
           { enabled: flags.blueprintBorderEnabled, type: 'blueprint', class: CLASSES.BLUEPRINT_BORDER, allElements: true },
@@ -229,35 +227,6 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
   return true;
 });
 
-// Initialize extension with default values on first load
-function initializeExtension() {
-  try {
-    chrome.storage.sync.get(STORAGE_KEYS, (result) => {
-      try {
-        // Check if this is first load (no saved data)
-        const isFirstLoad = Object.values(result).every(value => value === undefined);
-        
-        if (isFirstLoad) {
-          // Save defaults to storage
-          chrome.storage.sync.set(DEFAULTS);
-          console.log('First load detected, initializing with defaults');
-        }
-        
-        // Apply settings
-        updateVisualization();
-        updateColors();
-      } catch (error) {
-        console.log('Extension context invalidated in initializeExtension callback');
-      }
-    });
-  } catch (error) {
-    console.log('Extension context invalidated, stopping execution');
-  }
-}
-
-// Initialize on load
-initializeExtension();
-
 // Watch for dynamic content changes
 let observerTimeout;
 let observer = null;
@@ -297,7 +266,7 @@ function createObserver() {
           console.log('Extension context invalidated, stopping observer');
           cleanup();
         }
-      }, 100); // 100ms debounce
+      }, TIMING.DEBOUNCE_MS);
     });
     return true;
   } catch (error) {
@@ -306,8 +275,8 @@ function createObserver() {
   }
 }
 
-// Cleanup function
 function cleanup() {
+  // Disconnect observer
   if (observer) {
     try {
       observer.disconnect();
@@ -326,15 +295,65 @@ function cleanup() {
   
   // Remove dynamic styles
   if (dynamicStyle) {
-    dynamicStyle.remove();
+    try {
+      dynamicStyle.remove();
+    } catch (error) {
+      console.log('Error removing dynamic styles:', error);
+    }
     dynamicStyle = null;
   }
   
   // Remove all visualization classes
-  removeAllVisualizationClasses();
+  try {
+    removeAllVisualizationClasses();
+  } catch (error) {
+    console.log('Error removing visualization classes:', error);
+  }
+  
+  // Clear storage listener
+  if (storageListener) {
+    try {
+      chrome.storage.onChanged.removeListener(storageListener);
+    } catch (error) {
+      console.log('Error removing storage listener:', error);
+    }
+    storageListener = null;
+  }
 }
 
-// Initialize observer
+function initializeExtension() {
+  try {
+    chrome.storage.sync.get(STORAGE_KEYS, (result) => {
+      try {
+        updateVisualization();
+      } catch (error) {
+        console.log('Extension context invalidated in initializeExtension callback');
+      }
+    });
+  } catch (error) {
+    console.log('Extension context invalidated, stopping execution');
+  }
+}
+
+// Sync across tabs
+storageListener = (changes, namespace) => {
+  try {
+    if (namespace === 'sync' && changes.extensionEnabled) {
+      if (changes.extensionEnabled.newValue) {
+        updateVisualization();
+      } else {
+        cleanup();
+      }
+    }
+  } catch (error) {
+    console.log('Extension context invalidated in storage listener');
+  }
+};
+
+chrome.storage.onChanged.addListener(storageListener);
+
+// Initialize on load
+initializeExtension();
 createObserver();
 
 // Cleanup on page unload

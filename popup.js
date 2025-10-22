@@ -29,13 +29,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Load saved state with proper defaults
     chrome.storage.sync.get(STORAGE_KEYS, (result) => {
-      // Check if this is first load
-      const isFirstLoad = Object.values(result).some(value => value === undefined);
+      const updates = {};
+      let hasUpdates = false;
       
-      if (isFirstLoad) {
-        // Save defaults to storage
-        chrome.storage.sync.set(DEFAULTS);
-        console.log('First load detected, initializing popup with defaults');
+      STORAGE_KEYS.forEach(key => {
+        if (result[key] === undefined) {
+          updates[key] = DEFAULTS[key];
+          hasUpdates = true;
+        }
+      });
+      
+      if (hasUpdates) {
+        chrome.storage.sync.set(updates);
       }
       
       // Use saved values or defaults
@@ -123,26 +128,21 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     });
     
-    async function getCounts(retries = 3) {
+    async function getCounts() {
       try {
-          const response = await chrome.tabs.sendMessage(tab.id, { action: ACTIONS.GET_COUNTS });
-          if (response && response.blueprintCount !== undefined && response.nonBlueprintCount !== undefined) {
+        const response = await chrome.tabs.sendMessage(tab.id, { action: ACTIONS.GET_COUNTS });
+        if (response && response.blueprintCount !== undefined && response.nonBlueprintCount !== undefined) {
           blueprintCountElement.innerHTML = `Found <span class="count">${response.blueprintCount}</span> Blueprint component${response.blueprintCount !== 1 ? 's' : ''}`;
           nonBlueprintCountElement.innerHTML = `Found <span class="count">${response.nonBlueprintCount}</span> non-Blueprint element${response.nonBlueprintCount !== 1 ? 's' : ''}`;
-          return;
-          }
+        } else {
+          blueprintCountElement.textContent = 'Unable to scan page - try refreshing';
+          nonBlueprintCountElement.textContent = '';
+        }
       } catch (error) {
-      if (i === retries - 1) {
-      console.error('Error communicating with content script:', error);
-      blueprintCountElement.textContent = 'Please refresh the page to use this extension';
-      nonBlueprintCountElement.textContent = '';
-      return;
+        console.error('Error communicating with content script:', error);
+        blueprintCountElement.textContent = 'Please refresh the page to use this extension';
+        nonBlueprintCountElement.textContent = '';
       }
-      // Wait a bit before retrying
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-      blueprintCountElement.textContent = 'Unable to scan page - try refreshing';
-      nonBlueprintCountElement.textContent = '';
     }
     
     // Add toggle event handlers
@@ -154,6 +154,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Try to get counts after a short delay to ensure content script is ready
     setTimeout(() => {
       getCounts();
-    }, 100);
+    }, TIMING.POPUP_DELAY_MS);
   });
   
